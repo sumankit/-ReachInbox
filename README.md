@@ -67,7 +67,16 @@ npm run dev                 # http://localhost:3000
 4. Copy the Client ID/Secret into `frontend/.env.local` as `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`.
 5. Set `NEXTAUTH_SECRET` (frontend) and `JWT_SHARED_SECRET` (backend) to the **same** random string — the frontend signs a JWT after Google login and the backend verifies it with this shared secret, so the backend never talks to Google directly.
 
-### 1e. Ethereal Email
+### 1e. API docs (Swagger UI)
+
+With the backend running, open `http://localhost:4000/docs` for an interactive
+OpenAPI explorer of every route — handy for testing `POST /api/campaigns`
+without the frontend or Postman. Click "Authorize" and paste a bearer token
+(sign in on the frontend, then read `session.backendToken`, e.g. via
+`console.log` in `dashboard/page.tsx` temporarily, or your browser's
+Network tab on any `/api/*` request).
+
+### 1f. Ethereal Email
 
 No manual signup needed — `npm run seed:senders` (in `backend/`) programmatically
 creates fresh Ethereal test SMTP accounts via `nodemailer.createTestAccount()`

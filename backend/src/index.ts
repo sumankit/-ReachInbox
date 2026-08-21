@@ -1,16 +1,21 @@
 import express from "express";
 import cors from "cors";
+import swaggerUi from "swagger-ui-express";
 import { config } from "./config";
 import { campaignsRouter } from "./routes/campaigns";
 import { emailsRouter } from "./routes/emails";
 import { sendersRouter } from "./routes/senders";
 import { reconcileScheduledJobs } from "./services/reconcile";
+import { openApiSpec } from "./openapi";
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
+
+// Interactive API docs: http://localhost:4000/docs
+app.use("/docs", swaggerUi.serve, swaggerUi.setup(openApiSpec));
 
 app.use("/api/campaigns", campaignsRouter);
 app.use("/api/emails", emailsRouter);
