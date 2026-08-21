@@ -1,26 +1,36 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import { Button } from "./ui/Button";
 import { ErrorBanner } from "./ui/States";
 import { createCampaign, fetchSenders, ApiError } from "@/lib/api";
 import {
+  AlignIcon,
   ArrowLeftIcon,
   BoldIcon,
   ChevronDownIcon,
+  ChevronUpDownIcon,
   ClockIcon,
+  FontSizeIcon,
+  IndentDecreaseIcon,
+  IndentIncreaseIcon,
   ItalicIcon,
   ListIcon,
+  NumberedListIcon,
+  QuoteIcon,
   RedoIcon,
+  StrikethroughIcon,
   UnderlineIcon,
   UndoIcon,
   UploadIcon,
 } from "./ui/Icons";
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 function parseEmailsFromText(text: string): string[] {
   const matches = text.match(/[^\s,;]+@[^\s,;]+\.[^\s,;]+/g);
-  return matches ? Array.from(new Set(matches.map((m) => m.toLowerCase()))) : [];
+  return matches ? matches.map((m) => m.toLowerCase()) : [];
 }
 
 function toLocalInputValue(date: Date): string {
@@ -45,7 +55,8 @@ export function ComposeModal({
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [recipients, setRecipients] = useState<string[]>([]);
-  const [file, setFile] = useState<File | null>(null);
+  const [toInput, setToInput] = useState("");
+  const [fileName, setFileName] = useState<string | null>(null);
   const [delayMs, setDelayMs] = useState(2000);
   const [hourlyLimit, setHourlyLimit] = useState(200);
   const [senderCount, setSenderCount] = useState<number | null>(null);
@@ -68,46 +79,88 @@ export function ComposeModal({
     setSubject("");
     setBody("");
     setRecipients([]);
-    setFile(null);
+    setToInput("");
+    setFileName(null);
     setDelayMs(2000);
     setHourlyLimit(200);
     setStartTime(new Date(Date.now() + 5 * 60 * 1000));
     setError(null);
   }
 
-  async function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
-    const selected = e.target.files?.[0] ?? null;
-    setFile(selected);
-    if (!selected) {
-      setRecipients([]);
-      return;
-    }
-    const text = await selected.text();
-    setRecipients(parseEmailsFromText(text));
+  function addRecipients(emails: string[]) {
+    setRecipients((prev) => {
+      const next = new Set(prev);
+      for (const e of emails) if (EMAIL_RE.test(e)) next.add(e.toLowerCase());
+      return Array.from(next);
+    });
   }
 
-  function applyQuickSchedule(minutesFromNow: number) {
-    setStartTime(new Date(Date.now() + minutesFromNow * 60 * 1000));
+  function removeRecipient(email: string) {
+    setRecipients((prev) => prev.filter((r) => r !== email));
+  }
+
+  // Typing an email directly into "To" — comma/Enter/space commits it as a chip,
+  // matching how the Figma "To" field behaves as a tag input.
+  function handleToKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if (["Enter", ",", "Tab"].includes(e.key) && toInput.trim()) {
+      e.preventDefault();
+      addRecipients([toInput.trim()]);
+      setToInput("");
+    } else if (e.key === "Backspace" && !toInput && recipients.length > 0) {
+      removeRecipient(recipients[recipients.length - 1]);
+    }
+  }
+
+  function handleToBlur() {
+    if (toInput.trim()) {
+      addRecipients([toInput.trim()]);
+      setToInput("");
+    }
+  }
+
+  async function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
+    const selected = e.target.files?.[0] ?? null;
+    if (!selected) return;
+    setFileName(selected.name);
+    const text = await selected.text();
+    addRecipients(parseEmailsFromText(text));
+  }
+
+  function applyQuickSchedule(spec: { minutes?: number; tomorrowAt?: number }) {
+    if (spec.minutes != null) {
+      setStartTime(new Date(Date.now() + spec.minutes * 60 * 1000));
+    } else if (spec.tomorrowAt != null) {
+      const d = new Date();
+      d.setDate(d.getDate() + 1);
+      d.setHours(spec.tomorrowAt, 0, 0, 0);
+      setStartTime(d);
+    }
   }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!session?.backendToken) return;
-    if (!file) {
-      setError("Upload a list of email leads first.");
+    if (recipients.length === 0) {
+      setError("Add at least one recipient (type an email or upload a list).");
       return;
     }
 
     setSubmitting(true);
     setError(null);
     try {
+      // Recipients array (typed + uploaded, merged) is the single source of
+      // truth, so we always send it as the leads file the backend expects —
+      // whether the user typed emails, uploaded a file, or both.
+      const leadsBlob = new Blob([recipients.join("\n")], { type: "text/plain" });
+      const leadsFile = new File([leadsBlob], fileName ?? "recipients.txt", { type: "text/plain" });
+
       const formData = new FormData();
       formData.append("subject", subject);
       formData.append("body", body);
       formData.append("startTime", startTime.toISOString());
       formData.append("delayMs", String(delayMs));
       formData.append("hourlyLimit", String(hourlyLimit));
-      formData.append("leadsFile", file);
+      formData.append("leadsFile", leadsFile);
 
       await createCampaign(session.backendToken, formData);
       reset();
@@ -159,28 +212,16 @@ export function ComposeModal({
                     className="mb-3 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                   />
                   <div className="space-y-1">
-                    {[
-                      { label: "In 5 minutes", minutes: 5 },
-                      { label: "In 1 hour", minutes: 60 },
-                      { label: "Tomorrow, 10:00 AM", minutes: null },
-                    ].map((opt) => (
-                      <button
-                        key={opt.label}
-                        type="button"
-                        onClick={() => {
-                          if (opt.minutes != null) applyQuickSchedule(opt.minutes);
-                          else {
-                            const d = new Date();
-                            d.setDate(d.getDate() + 1);
-                            d.setHours(10, 0, 0, 0);
-                            setStartTime(d);
-                          }
-                        }}
-                        className="block w-full rounded-lg px-2 py-1.5 text-left text-sm text-slate-600 hover:bg-slate-50"
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
+                    <PresetButton label="Tomorrow" onClick={() => applyQuickSchedule({ tomorrowAt: 9 })} />
+                    <PresetButton
+                      label="Tomorrow, 10:00 AM"
+                      onClick={() => applyQuickSchedule({ tomorrowAt: 10 })}
+                    />
+                    <PresetButton
+                      label="Tomorrow, 11:00 AM"
+                      onClick={() => applyQuickSchedule({ tomorrowAt: 11 })}
+                    />
+                    <PresetButton label="Tomorrow, 3:00 PM" onClick={() => applyQuickSchedule({ tomorrowAt: 15 })} />
                   </div>
                   <div className="mt-3 flex justify-end gap-2">
                     <Button type="button" variant="ghost" onClick={() => setSchedulePopoverOpen(false)}>
@@ -209,13 +250,21 @@ export function ComposeModal({
           </Row>
 
           <Row label="To">
-            <div className="flex flex-1 flex-wrap items-center gap-2">
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
               {visibleChips.map((email) => (
                 <span
                   key={email}
-                  className="rounded-full border border-brand-200 bg-brand-50 px-3 py-1 text-xs text-brand-700"
+                  className="flex items-center gap-1 rounded-full border border-brand-200 bg-brand-50 px-3 py-1 text-xs text-brand-700"
                 >
                   {email}
+                  <button
+                    type="button"
+                    onClick={() => removeRecipient(email)}
+                    className="text-brand-400 hover:text-brand-700"
+                    aria-label={`Remove ${email}`}
+                  >
+                    ×
+                  </button>
                 </span>
               ))}
               {overflow > 0 && (
@@ -223,9 +272,15 @@ export function ComposeModal({
                   +{overflow}
                 </span>
               )}
-              {recipients.length === 0 && (
-                <span className="text-sm text-slate-400">recipient@example.com</span>
-              )}
+              <input
+                type="text"
+                value={toInput}
+                onChange={(e) => setToInput(e.target.value)}
+                onKeyDown={handleToKeyDown}
+                onBlur={handleToBlur}
+                placeholder={recipients.length === 0 ? "recipient@example.com" : "Add another…"}
+                className="min-w-[160px] flex-1 bg-transparent py-1 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none"
+              />
             </div>
             <button
               type="button"
@@ -243,9 +298,9 @@ export function ComposeModal({
               className="hidden"
             />
           </Row>
-          {file && (
+          {recipients.length > 0 && (
             <p className="-mt-3 pl-16 text-xs text-slate-400">
-              {recipients.length} email address(es) detected in {file.name}
+              {recipients.length} email address(es){fileName ? ` (incl. ${fileName})` : ""}
             </p>
           )}
 
@@ -282,25 +337,47 @@ export function ComposeModal({
             </label>
           </div>
 
-          <div className="overflow-hidden rounded-2xl bg-slate-50">
+          <div className="rounded-2xl bg-slate-50 p-4">
             <textarea
               value={body}
               onChange={(e) => setBody(e.target.value)}
               placeholder="Type Your Reply..."
               required
-              rows={10}
-              className="w-full resize-none bg-transparent px-5 pt-4 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none"
+              rows={2}
+              className="w-full resize-none bg-transparent text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none"
             />
-            <div className="flex items-center gap-3 rounded-full bg-white px-4 py-2.5 mx-4 mb-4 text-slate-400 shadow-sm">
+
+            {/* Decorative rich-text toolbar — matches the Figma icon set. The
+                compose body is stored as plain text server-side, so these
+                controls are visual only. */}
+            <div className="mt-3 flex flex-wrap items-center gap-3 rounded-full bg-white px-4 py-2.5 text-slate-400 shadow-sm">
               <UndoIcon width={16} height={16} />
               <RedoIcon width={16} height={16} />
+              <span className="h-4 w-px bg-slate-200" />
+              <span className="flex items-center gap-0.5">
+                <FontSizeIcon width={16} height={16} />
+                <ChevronDownIcon width={12} height={12} />
+              </span>
               <span className="h-4 w-px bg-slate-200" />
               <BoldIcon width={16} height={16} />
               <ItalicIcon width={16} height={16} />
               <UnderlineIcon width={16} height={16} />
               <span className="h-4 w-px bg-slate-200" />
+              <AlignIcon width={16} height={16} />
+              <ChevronUpDownIcon width={16} height={16} />
+              <span className="h-4 w-px bg-slate-200" />
+              <NumberedListIcon width={16} height={16} />
               <ListIcon width={16} height={16} />
+              <IndentIncreaseIcon width={16} height={16} />
+              <IndentDecreaseIcon width={16} height={16} />
+              <span className="h-4 w-px bg-slate-200" />
+              <QuoteIcon width={16} height={16} />
+              <AlignIcon width={16} height={16} />
+              <span className="h-4 w-px bg-slate-200" />
+              <StrikethroughIcon width={16} height={16} />
             </div>
+
+            <div className="mt-3 h-64" />
           </div>
 
           {error && <ErrorBanner message={error} />}
@@ -316,5 +393,17 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
       <span className="w-12 shrink-0 text-sm text-slate-500">{label}</span>
       {children}
     </div>
+  );
+}
+
+function PresetButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="block w-full rounded-lg px-2 py-1.5 text-left text-sm text-slate-600 hover:bg-slate-50"
+    >
+      {label}
+    </button>
   );
 }

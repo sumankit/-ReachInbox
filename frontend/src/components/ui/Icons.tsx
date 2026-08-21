@@ -125,3 +125,48 @@ export const ListIcon = (props: IconProps) => (
     <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
   </svg>
 );
+export const NumberedListIcon = (props: IconProps) => (
+  <svg {...base(props)}>
+    <path d="M10 6h11M10 12h11M10 18h11M4 6h1v3M4 10h2M4 14a1 1 0 1 1 1.7.7L4 17h2.5" />
+  </svg>
+);
+export const AlignIcon = (props: IconProps) => (
+  <svg {...base(props)}>
+    <path d="M4 6h16M4 12h10M4 18h13" />
+  </svg>
+);
+export const AlignJustifyIcon = (props: IconProps) => (
+  <svg {...base(props)}>
+    <path d="M4 6h16M4 12h16M4 18h16" />
+  </svg>
+);
+export const ChevronUpDownIcon = (props: IconProps) => (
+  <svg {...base(props)}>
+    <path d="m7 15 5 5 5-5M7 9l5-5 5 5" />
+  </svg>
+);
+export const IndentIncreaseIcon = (props: IconProps) => (
+  <svg {...base(props)}>
+    <path d="M4 6h16M10 12h10M4 18h16M4 9l4 3-4 3" />
+  </svg>
+);
+export const IndentDecreaseIcon = (props: IconProps) => (
+  <svg {...base(props)}>
+    <path d="M4 6h16M10 12h10M4 18h16M8 9 4 12l4 3" />
+  </svg>
+);
+export const QuoteIcon = (props: IconProps) => (
+  <svg {...base(props)}>
+    <path d="M7 8a3 3 0 0 0-3 3v2a3 3 0 0 0 3 3M17 8a3 3 0 0 0-3 3v2a3 3 0 0 0 3 3" />
+  </svg>
+);
+export const StrikethroughIcon = (props: IconProps) => (
+  <svg {...base(props)}>
+    <path d="M6 5h9.5a3 3 0 0 1 0 6M8 19h7.5a3 3 0 0 0 2-5.3M3 12h18" />
+  </svg>
+);
+export const FontSizeIcon = (props: IconProps) => (
+  <svg {...base(props)}>
+    <path d="M3 18 8 6l5 12M4.5 14h7M14 8h4l-3.5 5H18l-4 5" />
+  </svg>
+);
