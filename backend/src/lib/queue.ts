@@ -58,7 +58,9 @@ export async function rescheduleEmailJob(params: {
   scheduledAt: Date;
 }) {
   const delay = Math.max(0, params.scheduledAt.getTime() - Date.now());
-  const jobId = `${params.emailJobId}:r${Date.now()}`;
+  // BullMQ rejects custom job IDs containing ":" (it uses that as its own
+  // internal key separator), so "-r-" instead of ":r" here.
+  const jobId = `${params.emailJobId}-r-${Date.now()}`;
   await emailQueue.add("send-email", { emailJobId: params.emailJobId }, { jobId, delay });
 }
 
