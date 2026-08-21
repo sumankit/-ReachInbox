@@ -1,6 +1,6 @@
 import { Worker, Job } from "bullmq";
 import { redisConnection } from "./lib/redis";
-import { EMAIL_QUEUE_NAME, enqueueEmailJob } from "./lib/queue";
+import { EMAIL_QUEUE_NAME, rescheduleEmailJob } from "./lib/queue";
 import { config } from "./config";
 import { prisma } from "./lib/db";
 import { reserveSendSlot } from "./services/rateLimiter";
@@ -89,8 +89,12 @@ const worker = new Worker(EMAIL_QUEUE_NAME, processEmailJob, {
   concurrency: config.workerConcurrency,
 });
 
-worker.on("completed", (job) => console.log(`[worker] sent job ${job.id}`));
-worker.on("failed", (job, err) => console.error(`[worker] job ${job?.id} failed:`, err.message));
+worker.on("completed", (job) =>
+  console.log(`[worker] ${new Date().toISOString()} sent job ${job.id}`)
+);
+worker.on("failed", (job, err) =>
+  console.error(`[worker] ${new Date().toISOString()} job ${job?.id} failed:`, err.message)
+);
 
 reconcileScheduledJobs().then((n) => {
   if (n > 0) console.log(`[worker boot] Re-enqueued ${n} scheduled job(s) after restart.`);
