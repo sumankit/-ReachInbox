@@ -205,3 +205,15 @@ each send).
 - Single Postgres/Redis instance, no HA — fine for a take-home; the
   concurrency-safety work (atomic `UPDATE`, Redis `INCR`) is what would let
   this scale to multiple instances without changes.
+- **Hosted deployment note**: the backend/worker/DB/Redis all deploy cleanly
+  to Railway and the dashboard to Vercel (see architecture above), and the
+  full flow — auth, scheduling, rate limiting, restart-safe reconciliation —
+  works end-to-end there. The one exception: Railway blocks outbound SMTP
+  ports (25/465/587) on its network by default (anti-spam policy), so the
+  *hosted* worker can't complete the final `smtp.ethereal.email` handshake
+  and those jobs land in `FAILED` with a connection timeout. This is a
+  platform network policy, not an application bug — the identical code runs
+  the full send successfully against Ethereal when the worker is run
+  locally (see §1b), which is what the demo video shows. A production
+  deploy would swap Ethereal SMTP for an HTTP-based provider (e.g. Resend,
+  Postmark, SES) to avoid depending on outbound SMTP entirely.
