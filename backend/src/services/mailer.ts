@@ -1,5 +1,12 @@
+import dns from "dns";
 import nodemailer, { Transporter } from "nodemailer";
 import type { Sender } from "@prisma/client";
+
+// Some container hosts (Railway included) resolve SMTP hostnames to an
+// IPv6 address that isn't actually routable from the container's network,
+// which makes the TCP handshake hang until nodemailer's timeout fires
+// instead of failing fast. Preferring IPv4 resolution avoids that dead end.
+dns.setDefaultResultOrder("ipv4first");
 
 // One nodemailer transporter per Ethereal sender, cached so we don't
 // re-negotiate SMTP connections on every send.
