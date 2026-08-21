@@ -6,7 +6,7 @@ import { prisma } from "./lib/db";
 import { reserveSendSlot } from "./services/rateLimiter";
 import { reserveSendTiming } from "./services/sendPacing";
 import { sendEmail } from "./services/mailer";
-import { reconcileScheduledJobs } from "./services/reconcile";
+import { reconcileScheduledJobs, recoverStuckProcessingJobs } from "./services/reconcile";
 
 async function processEmailJob(job: Job<{ emailJobId: string }>) {
   const { emailJobId } = job.data;
