@@ -14,6 +14,11 @@ export const authOptions: NextAuthOptions = {
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID ?? "",
       clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
+      // Without this, Google silently re-uses its own still-active browser
+      // session after our app's logout and skips straight back to the
+      // dashboard instead of showing the account chooser. select_account
+      // forces that chooser every time, regardless of Google's own session.
+      authorization: { params: { prompt: "select_account" } },
     }),
   ],
   session: { strategy: "jwt" },
