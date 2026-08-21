@@ -40,7 +40,7 @@ async function processEmailJob(job: Job<{ emailJobId: string }>) {
       where: { id: emailJob.id },
       data: { status: "SCHEDULED", scheduledAt: rate.retryAt! },
     });
-    await enqueueEmailJob({ emailJobId: emailJob.id, scheduledAt: rate.retryAt! });
+    await rescheduleEmailJob({ emailJobId: emailJob.id, scheduledAt: rate.retryAt! });
     return;
   }
 
@@ -56,7 +56,7 @@ async function processEmailJob(job: Job<{ emailJobId: string }>) {
       where: { id: emailJob.id },
       data: { status: "SCHEDULED", scheduledAt: pacing.retryAt! },
     });
-    await enqueueEmailJob({ emailJobId: emailJob.id, scheduledAt: pacing.retryAt! });
+    await rescheduleEmailJob({ emailJobId: emailJob.id, scheduledAt: pacing.retryAt! });
     return;
   }
 
