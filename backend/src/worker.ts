@@ -99,6 +99,9 @@ worker.on("failed", (job, err) =>
 reconcileScheduledJobs().then((n) => {
   if (n > 0) console.log(`[worker boot] Re-enqueued ${n} scheduled job(s) after restart.`);
 });
+recoverStuckProcessingJobs().then((n) => {
+  if (n > 0) console.log(`[worker boot] Recovered ${n} job(s) stuck in PROCESSING from a crash.`);
+});
 
 console.log(
   `Worker started. concurrency=${config.workerConcurrency} minDelayMs=${config.minDelayBetweenEmailsMs}`
