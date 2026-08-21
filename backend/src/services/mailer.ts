@@ -13,6 +13,12 @@ function getTransporter(sender: Sender): Transporter {
       port: sender.smtpPort,
       secure: false,
       auth: { user: sender.smtpUser, pass: sender.smtpPass },
+      // Cloud hosts (Railway, etc.) can be slower/flakier reaching outbound
+      // SMTP than a local machine; give the handshake generous headroom
+      // instead of nodemailer's short default before giving up.
+      connectionTimeout: 30_000,
+      greetingTimeout: 30_000,
+      socketTimeout: 30_000,
     });
     transporterCache.set(sender.id, transporter);
   }

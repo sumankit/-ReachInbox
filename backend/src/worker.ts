@@ -14,9 +14,11 @@ async function processEmailJob(job: Job<{ emailJobId: string }>) {
   // Conditional update: only the worker that wins this WHERE clause gets to
   // send. Any concurrent/duplicate delivery of the same job (e.g. after a
   // crash + BullMQ retry, or two worker instances racing) sees 0 rows
-  // affected and simply skips.
+  // affected and simply skips. FAILED is included alongside SCHEDULED so a
+  // BullMQ retry (attempts > 1) can actually re-attempt a send that failed
+  // last time, instead of silently no-op'ing forever.
   const claim = await prisma.emailJob.updateMany({
-    where: { id: emailJobId, status: "SCHEDULED" },
+    where: { id: emailJobId, status: { in: ["SCHEDULED", "FAILED"] } },
     data: { status: "PROCESSING" },
   });
   if (claim.count === 0) {
