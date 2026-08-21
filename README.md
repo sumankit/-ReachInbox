@@ -131,10 +131,17 @@ each send).
   idempotency guard above uses an atomic conditional `UPDATE`, and the rate
   counters below use atomic Redis `INCR`, so no per-job logic depends on
   in-process state shared across workers.
-- **Minimum delay between sends**: `MIN_DELAY_BETWEEN_EMAILS_MS` is enforced
-  via BullMQ's built-in `Worker({ limiter: { max: 1, duration } })`, which
-  throttles how fast the worker pulls jobs off the queue, globally, across
-  all senders. Default: **2000ms** between any two sends.
+- **Minimum delay between sends**: enforced per-job in `services/sendPacing.ts`
+  via a Redis-tracked "last global send timestamp" (atomic Lua check-and-set,
+  safe across multiple worker processes). Each job's effective gap is
+  `max(MIN_DELAY_BETWEEN_EMAILS_MS, campaign.delayMs)` — the admin floor is
+  always respected as a hard minimum, but a campaign's own configured delay
+  (set from the compose form) is honored too when it's larger, even under
+  backlog. Default floor: **2000ms**. We deliberately did *not* use BullMQ's
+  built-in `Worker({ limiter })` for this — that throttles the whole queue to
+  one fixed cadence, so once there's any backlog (multiple campaigns queued
+  close together) every job would drain at that single fixed pace regardless
+  of what delay its own campaign asked for.
 - **Per-sender hourly cap**: enforced in `services/rateLimiter.ts` using a
   Redis counter keyed `rl:{senderId}:{YYYYMMDDHH}`, incremented atomically
   with `INCR` (safe across multiple worker processes/instances — no

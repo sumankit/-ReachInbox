@@ -4,6 +4,7 @@ import { EMAIL_QUEUE_NAME, enqueueEmailJob } from "./lib/queue";
 import { config } from "./config";
 import { prisma } from "./lib/db";
 import { reserveSendSlot } from "./services/rateLimiter";
+import { reserveSendTiming } from "./services/sendPacing";
 import { sendEmail } from "./services/mailer";
 import { reconcileScheduledJobs } from "./services/reconcile";
 
@@ -43,6 +44,22 @@ async function processEmailJob(job: Job<{ emailJobId: string }>) {
     return;
   }
 
+  // --- Per-job send pacing (Redis-backed, safe across workers) ---
+  // Enforces the LARGER of the admin floor (MIN_DELAY_BETWEEN_EMAILS_MS)
+  // and this job's own campaign.delayMs — so a campaign's configured delay
+  // is actually honored even under backlog, instead of every job draining
+  // at one fixed global cadence (see services/sendPacing.ts).
+  const requiredGap = Math.max(config.minDelayBetweenEmailsMs, emailJob.campaign.delayMs);
+  const pacing = await reserveSendTiming(requiredGap);
+  if (!pacing.allowed) {
+    await prisma.emailJob.update({
+      where: { id: emailJob.id },
+      data: { status: "SCHEDULED", scheduledAt: pacing.retryAt! },
+    });
+    await enqueueEmailJob({ emailJobId: emailJob.id, scheduledAt: pacing.retryAt! });
+    return;
+  }
+
   try {
     await sendEmail({
       sender: emailJob.sender,
@@ -63,15 +80,13 @@ async function processEmailJob(job: Job<{ emailJobId: string }>) {
   }
 }
 
+// Note: no static `limiter` here on purpose — that would force every job
+// through one fixed global cadence. Pacing is instead enforced per-job
+// above via reserveSendTiming, which respects each campaign's own delay
+// (while never going below the MIN_DELAY_BETWEEN_EMAILS_MS floor).
 const worker = new Worker(EMAIL_QUEUE_NAME, processEmailJob, {
   connection: redisConnection,
   concurrency: config.workerConcurrency,
-  // Global minimum delay between any two sends this worker processes,
-  // regardless of sender (mimics real provider throttling).
-  limiter: {
-    max: 1,
-    duration: config.minDelayBetweenEmailsMs,
-  },
 });
 
 worker.on("completed", (job) => console.log(`[worker] sent job ${job.id}`));
