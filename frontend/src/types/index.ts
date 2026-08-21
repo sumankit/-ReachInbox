@@ -4,6 +4,7 @@ export interface EmailJob {
   id: string;
   recipient: string;
   subject: string;
+  body: string;
   scheduledAt: string;
   sentAt: string | null;
   status: EmailJobStatus;

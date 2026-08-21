@@ -21,6 +21,7 @@ emailsRouter.get("/", requireAuth, async (req, res) => {
       id: true,
       recipient: true,
       subject: true,
+      body: true,
       scheduledAt: true,
       sentAt: true,
       status: true,
