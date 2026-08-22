@@ -16,10 +16,18 @@ const STUCK_PROCESSING_THRESHOLD_MS = 2 * 60 * 1000;
  * otherwise silently never send.
  *
  * This walks every DB row still in SCHEDULED status and makes sure a
- * matching BullMQ job exists (re-adding with the correct remaining delay,
- * or delay 0 if the original time already passed). Because BullMQ jobs are
- * added with jobId = EmailJob.id, this is idempotent: if the job is still
- * present in Redis, `add` is a safe no-op and nothing is duplicated.
+ * matching, still-live BullMQ job exists (re-adding with the correct
+ * remaining delay, or delay 0 if the original time already passed).
+ *
+ * A BullMQ job found under `jobId = EmailJob.id` is only trusted if it's
+ * still in a pending state (waiting/delayed/active/etc). One that's
+ * already `completed` or `failed` is a *stale* record — e.g. left behind
+ * by an earlier reschedule attempt that crashed after flipping the DB row
+ * back to SCHEDULED but before it could hand off to a fresh job (see
+ * rescheduleEmailJob). Trusting a stale terminal-state job here would mean
+ * silently never re-adding it — the email would sit in SCHEDULED forever.
+ * So a stale one is treated the same as "missing": re-add with a fresh
+ * jobId, same as rescheduleEmailJob does.
  */
 export async function reconcileScheduledJobs(): Promise<number> {
   const scheduled = await prisma.emailJob.findMany({
@@ -30,9 +38,15 @@ export async function reconcileScheduledJobs(): Promise<number> {
   let reEnqueued = 0;
   for (const job of scheduled) {
     const existing = await emailQueue.getJob(job.id);
-    if (existing) continue; // already present in Redis, nothing to do
+    const state = existing ? await existing.getState() : null;
+    const isLive = existing && state !== "completed" && state !== "failed" && state !== "unknown";
+    if (isLive) continue; // still genuinely pending in Redis, nothing to do
 
-    await enqueueEmailJob({ emailJobId: job.id, scheduledAt: job.scheduledAt });
+    if (existing) {
+      await rescheduleEmailJob({ emailJobId: job.id, scheduledAt: job.scheduledAt });
+    } else {
+      await enqueueEmailJob({ emailJobId: job.id, scheduledAt: job.scheduledAt });
+    }
     reEnqueued += 1;
   }
 
